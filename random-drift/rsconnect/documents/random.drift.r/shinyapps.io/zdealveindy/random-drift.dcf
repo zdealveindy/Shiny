@@ -1,0 +1,13 @@
+name: random-drift
+title: random-drift
+username:
+account: zdealveindy
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 234212
+bundleId: 1072819
+url: https://zdealveindy.shinyapps.io/random-drift/
+when: 1510582583.40985
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: compare-ordinations/app.R
