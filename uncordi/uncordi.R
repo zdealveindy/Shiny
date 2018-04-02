@@ -17,13 +17,6 @@ read.delim.downl <- function (file, url = paste ('https://raw.githubusercontent.
   read.delim (destfile, ...)
 }
 
-# files.to.download <- c('vltava-spe.txt', 'vltava-env.txt',
-#                        'grasslands-spe.txt', 'grasslands-env.txt',
-#                        'simul1-spe.txt', 'simul1-env.txt')
-# 
-# lapply (files.to.download, FUN = function (x) download.file (paste ('https://raw.githubusercontent.com/zdealveindy/anadat-r/master/data/', x, sep = ''), destfile = paste ('data/', x, sep = '')))
-
-
 library(shiny)
 
 # Define UI for application that draws a histogram
@@ -85,7 +78,7 @@ ui <- fluidPage(
                       inline = TRUE),
          checkboxGroupInput(inputId = "display",
                       label = 'Display in ordination diagram:',
-                      choices = list ('species', 'sites', 'groups', 'ordispider', 'ordihull'),
+                      choices = list ('species', 'sites', 'groups', 'ordispider', 'ordihull', 'envfit'),
                       selected = c('species', 'sites'),
                       inline = TRUE)
       ),
@@ -94,8 +87,12 @@ ui <- fluidPage(
       mainPanel(
         plotOutput("distPlot", height = "600px"),
         verbatimTextOutput("code"),
-        verbatimTextOutput("text")
-      )
+        verbatimTextOutput("ordi"),
+        conditionalPanel (
+          condition = "input.display.indexOf('envfit')!=-1",
+          verbatimTextOutput("ef")
+          )
+        )
    )
 )
 
@@ -106,24 +103,30 @@ server <- function(input, output) {
     # load data according to input$dataset
     switch (input$dataset,
             "vltava" = {spe <- read.delim.downl ('vltava-spe.txt', row.names = 1)
-                        env <- read.delim.downl ('vltava-env.txt')
-                        groups <- env$GROUP
+                        env0 <- read.delim.downl ('vltava-env.txt')
+                        groups <- env0$GROUP
+                        env <- env0[, c("ELEVATION", "HEAT.LOAD", "SOILDPT", "pH", "FLUVISOL")]
+                        env$FLUVISOL <- as.factor (env$FLUVISOL)
                         },
             "grasslands" = {spe <- read.delim.downl ('grasslands-spe.txt', row.names = 1)
-                            env <- read.delim.downl ('grasslands-env.txt')
-                            groups <- as.numeric (env$classification)
+                            env0 <- read.delim.downl ('grasslands-env.txt')
+                            groups <- as.numeric (env0$classification)
+                            env <- env0[, c('altitude', 'heatload', 'pH.H', 'soildepth')]
                             },
             "simul1" = {spe <- read.delim.downl ('simul1-spe.txt', row.names = 1)
-                        env <- read.delim.downl ('simul1-env.txt', row.names = 1)
-                        groups <- env$groups
+                        env0 <- read.delim.downl ('simul1-env.txt', row.names = 1)
+                        groups <- env0$groups
+                        env <- env0[, 'gradient', drop = F]
                         },
             "simul.short" = {spe <- read.delim.downl ('simul.short-spe.txt', row.names = 1)
-                        env <- read.delim.downl ('simul.short-env.txt', row.names = 1)
-                        groups <- env$groups
+                        env0 <- read.delim.downl ('simul.short-env.txt', row.names = 1)
+                        groups <- env0$groups
+                        env <- env0[, c('gradient1', 'gradient2')]
                         },
             "simul.long" = {spe <- read.delim.downl ('simul.long-spe.txt', row.names = 1)
-                        env <- read.delim.downl ('simul.long-env.txt', row.names = 1)
-                        groups <- env$groups
+                        env0 <- read.delim.downl ('simul.long-env.txt', row.names = 1)
+                        groups <- env0$groups
+                        env <- env0[, c('gradient1', 'gradient2')]
             }
     )
     
@@ -136,25 +139,28 @@ server <- function(input, output) {
   })
    
   calcOrdi <- reactive ({
-    spe <- inputData ()$spe
+    data_in <- inputData ()
     ordi <- switch (input$ordimethod,
-                    PCA = rda (spe),
-                    CA = cca (spe),
-                    DCA = decorana (spe),
-                    "tb-PCA" = rda (decostand (spe, method = input$pretransf_spe)),
-                    PCoA = cmdscale (vegdist (spe, method = input$distance_PCoA), k = nrow (spe)-1),
-                    NMDS = metaMDS (spe, distance = input$distance_NMDS, try = 1, trymax = 1))
-    ordi
+                    PCA = rda (data_in$spe),
+                    CA = cca (data_in$spe),
+                    DCA = decorana (data_in$spe),
+                    "tb-PCA" = rda (decostand (data_in$spe, method = input$pretransf_spe)),
+                    PCoA = cmdscale (vegdist (data_in$spe, method = input$distance_PCoA), k = nrow (data_in$spe)-1),
+                    NMDS = metaMDS (data_in$spe, distance = input$distance_NMDS, try = 1, trymax = 1))
+    ef <- envfit (ordi, data_in$env)
+    list (ordi = ordi, ef = ef)
   })
 
   output$distPlot <- renderPlot(width = 600, height = 600, expr = {
     data_in <- inputData ()
-    ordi <- calcOrdi ()
+    calc <- calcOrdi ()
+    ordi <- calc$ordi
      ordiplot (ordi, type = 'n')
      if ('species' %in% input$display  & input$ordimethod != 'PCoA') points (ordi, display = 'species', col = 'red', pch = '+')
      if ('sites' %in% input$display) points (ordi, display = 'sites', pch = if ('groups' %in% input$display) as.character (data_in$groups) else 1, col = if ('groups' %in% input$display) brewer.pal (n = max(data_in$groups), 'Set1')[data_in$groups] else 'black')
      if ('ordispider' %in% input$display) for (gr in unique (data_in$groups)) ordispider (ordi, groups = data_in$groups, show.groups = gr, col = if ('groups' %in% input$display) brewer.pal (n = max(data_in$groups), 'Set1')[gr] else 'black')
-     if ('ordihull' %in% input$display) for (gr in unique (data_in$groups)) ordihull (ordi, groups = data_in$groups, show.groups = gr, col = if ('groups' %in% input$display) brewer.pal (n = max(data_in$groups), 'Set1')[gr] else 'black')
+     if ('ordihull' %in% input$display) for (gr in unique (data_in$groups)) ordihull (ordi, groups = data_in$groups, show.groups = gr, draw = 'polygon', alpha = 50, col = if ('groups' %in% input$display) brewer.pal (n = max(data_in$groups), 'Set1')[gr] else 'black', border = if ('groups' %in% input$display) brewer.pal (n = max(data_in$groups), 'Set1')[gr] else 'black')
+     if ('envfit' %in% input$display) plot (calc$ef)
    })
   
   output$code <- renderPrint ({
@@ -195,13 +201,15 @@ server <- function(input, output) {
         if ("groups" %in% input$display) out <- paste(out, "for (gr in unique (groups)) ordispider (ordi, groups = groups, show.group = gr, col = gr)", sep = '\n') else
           out <- paste(out, "ordispider (ordi, groups = groups)", sep = '\n')
       if ('ordihull' %in% input$display)
-        if ("groups" %in% input$display) out <- paste(out, "for (gr in unique (groups)) ordihull (ordi, groups = groups, show.group = gr, col = gr)", sep = '\n') else
-          out <- paste(out, "ordihull (ordi, groups = groups)", sep = '\n')        
+        if ("groups" %in% input$display) out <- paste(out, "for (gr in unique (groups)) ordihull (ordi, groups = groups, show.group = gr, draw = 'polygon', col = gr, border = gr, alpha = 50)", sep = '\n') else
+          out <- paste(out, "ordihull (ordi, groups = groups, draw = 'polygon', alpha = 50)", sep = '\n')
+      if ('envfit' %in% input$display) out <- paste (out, "ef <- envfit (ordi, env)", "plot (ef)", sep = '\n')
       diag.output <- out
       }
-    cat (paste (code.intro, '\n# Import of data from GitHub repository:', read.files, transf.output, '\n# Calculating ordination:', ordi.output, '\n# Ploting ordination diagram:', diag.output, '\n# Summary of ordination:', 'ordi', sep = '\n'))
+    cat (paste (code.intro, '\n# Import of data from GitHub repository:', read.files, transf.output, '\n# Calculating ordination:', ordi.output, '\n# Ploting ordination diagram:', diag.output, '\n# Summary of ordination:', if ('envfit' %in% input$display) paste ('ordi', 'ef', sep = '\n') else 'ordi', sep = '\n'))
   }) 
-  output$text <- renderPrint ({if (input$ordimethod != 'PCoA') calcOrdi () else cat("The function 'cmdscale' does not return summary output.")})
+  output$ordi <- renderPrint ({if (input$ordimethod != 'PCoA') calcOrdi ()$ordi else cat("The function 'cmdscale' does not return summary output.")})
+  output$ef <- renderPrint ({calcOrdi ()$ef})
 }
 
 # Run the application 
