@@ -5,8 +5,9 @@ account: zdealveindy
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 312457
-bundleId: 1297381
+bundleId: 1297585
 url: https://zdealveindy.shinyapps.io/uncordi/
-when: 1522639215.38227
+when: 1522656841.51878
 asMultiple: FALSE
 asStatic: FALSE
+ignoredFiles: data/vltava-env.txt|data/vltava-spe.txt

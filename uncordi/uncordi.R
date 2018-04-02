@@ -24,7 +24,7 @@ ui <- fluidPage(
    
    # Application title
    titlePanel("Unconstrained ordination in vegan"),
-   
+   helpText ("Author: David Zeleny. Read more in the", a('helpfile', href = 'http://anadat-r.davidzeleny.net/doku.php/en:uncordi'), '.'),
    # Sidebar with a slider input for number of bins 
    sidebarLayout(
       sidebarPanel(
